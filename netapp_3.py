@@ -44,81 +44,25 @@ def get_db_connection():
         connection = mysql.connector.connect(
             host='localhost',
             database='network_monitor',
-            user='pma',
+            user='root',
             password='@Danielson2000',  # XAMPP default password is empty
-            connection_timeout=5,
-            use_pure=True  # Use pure Python implementation for better compatibility
+            connection_timeout=5
         )
         return connection
     except Error as e:
-        st.error(f"Database connection error: {e}")
         return None
 
 # -------------------------
-# Initialize Database Tables (Run once)
+# Save Metrics to Database (Only when data is valid and recent)
 # -------------------------
-def init_database():
-    """Initialize database tables if they don't exist"""
-    connection = get_db_connection()
-    if connection:
-        try:
-            cursor = connection.cursor()
-            
-            # Create network_metrics table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS network_metrics (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    devices INT NOT NULL,
-                    latency FLOAT NOT NULL,
-                    packet_loss FLOAT NOT NULL,
-                    bandwidth FLOAT NOT NULL,
-                    congestion_prediction INT NOT NULL,
-                    timestamp DATETIME NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Create recommendations table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS recommendations (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    metric_id INT NOT NULL,
-                    recommendation TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (metric_id) REFERENCES network_metrics(id) ON DELETE CASCADE
-                )
-            """)
-            
-            # Create system_logs table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS system_logs (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    log_type VARCHAR(50) NOT NULL,
-                    message TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            connection.commit()
-            cursor.close()
-            connection.close()
-            return True
-        except Error as e:
-            st.error(f"Database initialization error: {e}")
-            return False
-    return False
-
-# -------------------------
-# Save Metrics to Database (Improved version)
-# -------------------------
-def save_to_database(devices, latency, packet_loss, bandwidth, prediction, data_age_seconds, data_status):
-    """Save network metrics to database - now saves more frequently"""
-    # Don't save if data is too stale (older than STALE_THRESHOLD_SECONDS)
+def save_to_database(devices, latency, packet_loss, bandwidth, prediction, data_age_seconds):
+    """Save network metrics to database - only if data is valid and recent"""
+    # Don't save if data is stale or offline (older than STALE_THRESHOLD_SECONDS)
     if data_age_seconds > STALE_THRESHOLD_SECONDS:
         return False
     
-    # Don't save if all metrics are zero AND device is offline (indicates offline/error state)
-    if devices == 0 and latency == 0 and packet_loss == 0 and bandwidth == 0 and data_status == "offline":
+    # Don't save if all metrics are zero (indicates offline/error state)
+    if devices == 0 and latency == 0 and packet_loss == 0 and bandwidth == 0:
         return False
     
     connection = get_db_connection()
@@ -152,7 +96,7 @@ def save_to_database(devices, latency, packet_loss, bandwidth, prediction, data_
             
             # Log the action
             log_query = "INSERT INTO system_logs (log_type, message) VALUES (%s, %s)"
-            log_message = f'Network metrics saved - Devices: {devices}, Latency: {latency:.1f}ms, Packet Loss: {packet_loss:.2f}%, Bandwidth: {bandwidth:.1f}Mbps, Prediction: {prediction}'
+            log_message = f'Network metrics saved - Devices: {devices}, Latency: {latency}, Prediction: {prediction}'
             cursor.execute(log_query, ('INFO', log_message))
             
             connection.commit()
@@ -160,7 +104,6 @@ def save_to_database(devices, latency, packet_loss, bandwidth, prediction, data_
             connection.close()
             return True
         except Error as e:
-            st.error(f"Error saving to database: {e}")
             return False
     return False
 
@@ -349,7 +292,7 @@ def load_historical_data(limit=100):
         try:
             query = """
                 SELECT id, timestamp, devices, latency, packet_loss, bandwidth, 
-                       congestion_prediction
+                       congestion_prediction, created_at
                 FROM network_metrics
                 ORDER BY timestamp DESC
                 LIMIT %s
@@ -629,11 +572,6 @@ def format_time_diff(seconds):
 # Main App
 # -------------------------
 def main():
-    # Initialize database tables
-    if not init_database():
-        st.error("Failed to initialize database. Please check your MySQL connection.")
-        st.stop()
-    
     # Header
     st.markdown("""
     <div class="main-header">
@@ -705,8 +643,7 @@ def main():
         placeholder = st.empty()
         
         # Auto-refresh loop
-        last_saved_time = 0
-        save_interval = 30  # Save every 30 seconds instead of every 5th refresh
+        refresh_count = 0
         
         while True:
             with placeholder.container():
@@ -810,30 +747,16 @@ def main():
                 else:
                     prediction = 0
                 
-                # Save to database based on time interval
-                current_time = time.time()
-                if data_usable and (current_time - last_saved_time) >= save_interval:
-                    if save_to_database(devices, latency, packet_loss, bandwidth, prediction, time_diff, data_status):
-                        st.toast(f"✅ Data saved to database! Time: {datetime.now().strftime('%H:%M:%S')}", icon="💾")
-                        last_saved_time = current_time
-                    else:
-                        st.toast("⚠️ Failed to save data to database", icon="⚠️")
-                elif not data_usable and (current_time - last_saved_time) >= save_interval:
-                    # Log offline status
-                    connection = get_db_connection()
-                    if connection:
-                        try:
-                            cursor = connection.cursor()
-                            log_query = "INSERT INTO system_logs (log_type, message) VALUES (%s, %s)"
-                            log_message = f'Device offline - No data received for {format_time_diff(time_diff)}'
-                            cursor.execute(log_query, ('WARNING', log_message))
-                            connection.commit()
-                            cursor.close()
-                            connection.close()
-                            st.toast(f"⚠️ Device offline - Last data: {format_time_diff(time_diff)}", icon="⚠️")
-                        except:
-                            pass
-                        last_saved_time = current_time
+                # Save to database only if data is fresh and every 5th refresh
+                refresh_count += 1
+                if data_usable and refresh_count % 5 == 0 and time_diff <= STALE_THRESHOLD_SECONDS:
+                    if save_to_database(devices, latency, packet_loss, bandwidth, prediction, time_diff):
+                        st.toast("✅ Fresh data saved to database!", icon="💾")
+                elif not data_usable and refresh_count % 10 == 0:
+                    if data_status == "stale":
+                        st.toast(f"⚠️ Stale data detected - Last update {format_time_diff(time_diff)}", icon="⚠️")
+                    elif data_status == "offline":
+                        st.toast("❌ Device offline - No data to save", icon="❌")
                 
                 # Display prediction
                 st.markdown("---")
@@ -1007,4 +930,4 @@ def main():
             st.info("No logs available yet.")
 
 if __name__ == "__main__":
-    main()
+    main() am not get data in data base can u collect i
