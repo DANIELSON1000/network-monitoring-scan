@@ -930,4 +930,4 @@ def main():
             st.info("No logs available yet.")
 
 if __name__ == "__main__":
-    main() am not get data in data base can u collect i
+    main() 
