@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 AI Network Monitor with MySQL Database Integration
+Enhanced UI with better visibility and comprehensive data display
 Created for XAMPP MySQL Database
 """
 
@@ -265,6 +266,10 @@ def get_db_statistics():
             """)
             avg_data = cursor.fetchone()
             
+            # Latest record timestamp
+            cursor.execute("SELECT MAX(timestamp) FROM network_metrics")
+            latest_timestamp = cursor.fetchone()[0]
+            
             cursor.close()
             connection.close()
             
@@ -275,7 +280,8 @@ def get_db_statistics():
                 'avg_latency': float(avg_data[0]) if avg_data[0] else 0.0,
                 'avg_packet_loss': float(avg_data[1]) if avg_data[1] else 0.0,
                 'avg_bandwidth': float(avg_data[2]) if avg_data[2] else 0.0,
-                'avg_devices': float(avg_data[3]) if avg_data[3] else 0.0
+                'avg_devices': float(avg_data[3]) if avg_data[3] else 0.0,
+                'latest_timestamp': latest_timestamp
             }
         except Error as e:
             return {}
@@ -292,7 +298,7 @@ def load_historical_data(limit=100):
         try:
             query = """
                 SELECT id, timestamp, devices, latency, packet_loss, bandwidth, 
-                       congestion_prediction, created_at
+                       congestion_prediction
                 FROM network_metrics
                 ORDER BY timestamp DESC
                 LIMIT %s
@@ -350,23 +356,27 @@ def load_system_logs(limit=100):
     return pd.DataFrame()
 
 # -------------------------
-# Custom CSS
+# Enhanced Custom CSS with Better Visibility
 # -------------------------
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
+    /* Main background with dark gradient for better contrast */
     .stApp {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
         font-family: 'Inter', sans-serif;
     }
     
+    /* Main header with glassmorphism effect */
     .main-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%);
+        backdrop-filter: blur(10px);
         padding: 2rem;
         border-radius: 20px;
         margin-bottom: 2rem;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        border: 1px solid rgba(255,255,255,0.2);
     }
     
     .main-title {
@@ -379,26 +389,30 @@ st.markdown("""
     }
     
     .subtitle {
-        color: rgba(255,255,255,0.9);
+        color: rgba(255,255,255,0.95);
         font-size: 1.1rem;
     }
     
+    /* Metric cards with dark background and light text */
     .metric-card {
-        background: rgba(255,255,255,0.95);
+        background: rgba(30, 30, 50, 0.95);
         border-radius: 20px;
         padding: 1.5rem;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.2);
         transition: transform 0.3s ease;
+        border: 1px solid rgba(102, 126, 234, 0.3);
+        backdrop-filter: blur(5px);
     }
     
     .metric-card:hover {
         transform: translateY(-5px);
+        border-color: rgba(102, 126, 234, 0.6);
     }
     
     .metric-label {
         font-size: 0.9rem;
         font-weight: 600;
-        color: #667eea;
+        color: #a0aec0;
         text-transform: uppercase;
         letter-spacing: 1px;
         margin-bottom: 0.5rem;
@@ -407,75 +421,193 @@ st.markdown("""
     .metric-value {
         font-size: 2rem;
         font-weight: 700;
-        color: #2d3748;
+        color: #ffffff;
         margin-bottom: 0.25rem;
     }
     
+    .metric-unit {
+        color: #a0aec0;
+        font-size: 0.8rem;
+    }
+    
+    /* Prediction cards */
     .prediction-risk {
-        background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+        background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
         color: white;
-        padding: 1rem;
+        padding: 1.5rem;
         border-radius: 15px;
         text-align: center;
+        box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
     }
     
     .prediction-normal {
-        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
         color: white;
-        padding: 1rem;
+        padding: 1.5rem;
         border-radius: 15px;
         text-align: center;
+        box-shadow: 0 4px 15px rgba(5, 150, 105, 0.3);
     }
     
+    .prediction-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Status cards with dark backgrounds */
+    .status-online {
+        background: rgba(5, 150, 105, 0.2);
+        border-radius: 15px;
+        padding: 1rem;
+        margin: 1rem 0;
+        border-left: 4px solid #059669;
+        text-align: center;
+        backdrop-filter: blur(5px);
+        color: #ffffff;
+    }
+    
+    .status-recent {
+        background: rgba(59, 130, 246, 0.2);
+        border-radius: 15px;
+        padding: 1rem;
+        margin: 1rem 0;
+        border-left: 4px solid #3b82f6;
+        text-align: center;
+        backdrop-filter: blur(5px);
+        color: #ffffff;
+    }
+    
+    .status-stale {
+        background: rgba(245, 158, 11, 0.2);
+        border-radius: 15px;
+        padding: 1rem;
+        margin: 1rem 0;
+        border-left: 4px solid #f59e0b;
+        text-align: center;
+        backdrop-filter: blur(5px);
+        color: #ffffff;
+    }
+    
+    .status-offline {
+        background: rgba(220, 38, 38, 0.2);
+        border-radius: 15px;
+        padding: 1rem;
+        margin: 1rem 0;
+        border-left: 4px solid #dc2626;
+        text-align: center;
+        backdrop-filter: blur(5px);
+        color: #ffffff;
+    }
+    
+    /* Recommendation cards */
     .recommendation-card {
-        background: rgba(255,255,255,0.95);
+        background: rgba(45, 45, 65, 0.95);
         border-radius: 15px;
         padding: 1rem;
         margin: 0.5rem 0;
         border-left: 4px solid #667eea;
+        backdrop-filter: blur(5px);
     }
     
+    .recommendation-text {
+        color: #e2e8f0;
+        font-size: 0.95rem;
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: rgba(30, 30, 50, 0.5);
+        border-radius: 12px;
+        padding: 0.5rem;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        color: #e2e8f0;
+        font-weight: 500;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #667eea;
+        color: white;
+    }
+    
+    /* Dataframe styling */
+    .stDataFrame {
+        background: rgba(30, 30, 50, 0.8);
+        border-radius: 12px;
+        padding: 0.5rem;
+    }
+    
+    .stDataFrame div[data-testid="stDataFrame"] {
+        color: #e2e8f0;
+    }
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1a1a2e 0%, #0f172a 100%);
+        border-right: 1px solid rgba(102, 126, 234, 0.3);
+    }
+    
+    [data-testid="stSidebar"] .stMarkdown {
+        color: #e2e8f0;
+    }
+    
+    /* Footer */
     .footer {
         text-align: center;
         padding: 2rem;
-        color: rgba(255,255,255,0.7);
+        color: rgba(255,255,255,0.6);
         font-size: 0.9rem;
     }
     
-    .status-online {
-        background: rgba(255,255,255,0.95);
-        border-radius: 15px;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-left: 4px solid #48bb78;
-        text-align: center;
+    /* Metric value colors */
+    .metric-value-high {
+        color: #f87171;
     }
     
-    .status-recent {
-        background: rgba(255,255,255,0.95);
-        border-radius: 15px;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-left: 4px solid #4299e1;
-        text-align: center;
+    .metric-value-medium {
+        color: #fbbf24;
     }
     
-    .status-stale {
-        background: rgba(255,255,255,0.95);
-        border-radius: 15px;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-left: 4px solid #ed8936;
-        text-align: center;
+    .metric-value-low {
+        color: #4ade80;
     }
     
-    .status-offline {
-        background: rgba(255,255,255,0.95);
-        border-radius: 15px;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-left: 4px solid #f56565;
-        text-align: center;
+    /* Button styling */
+    .stButton button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }
+    
+    .stButton button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Download button */
+    .stDownloadButton button {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        background: rgba(45, 45, 65, 0.8);
+        border-radius: 10px;
+        color: #e2e8f0;
+    }
+    
+    .streamlit-expanderContent {
+        background: rgba(30, 30, 50, 0.6);
+        border-radius: 10px;
+        color: #e2e8f0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -569,6 +701,17 @@ def format_time_diff(seconds):
         return f"{days} day{'s' if days != 1 else ''} ago"
 
 # -------------------------
+# Get value color class
+# -------------------------
+def get_value_color(value, thresholds):
+    """Return CSS class based on value thresholds"""
+    if value > thresholds.get('high', float('inf')):
+        return "metric-value-high"
+    elif value > thresholds.get('medium', float('inf')):
+        return "metric-value-medium"
+    return "metric-value-low"
+
+# -------------------------
 # Main App
 # -------------------------
 def main():
@@ -576,7 +719,7 @@ def main():
     st.markdown("""
     <div class="main-header">
         <div class="main-title">📡 AI Network Congestion Monitor</div>
-        <div class="subtitle">Real-time network analytics with MySQL database integration</div>
+        <div class="subtitle">Real-time network analytics with MySQL database integration | Live ThingSpeak Data</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -624,12 +767,17 @@ def main():
             st.metric("Congestion Events", stats['congestion_count'])
             st.metric("Avg Devices", f"{stats['avg_devices']:.1f}")
             st.metric("Avg Latency", f"{stats['avg_latency']:.1f} ms")
+            st.metric("Avg Bandwidth", f"{stats['avg_bandwidth']:.1f} Mbps")
+            st.metric("Avg Packet Loss", f"{stats['avg_packet_loss']:.2f}%")
+            if stats['latest_timestamp']:
+                st.info(f"📅 Latest data: {stats['latest_timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
         else:
-            st.info("No data in database yet")
+            st.info("📭 No data in database yet. Waiting for fresh data...")
         
         st.markdown("---")
         st.markdown("### 🤖 AI Model")
         st.markdown("Machine Learning model analyzing network patterns to predict congestion.")
+        st.markdown("**Features:** Devices, Latency, Packet Loss, Bandwidth")
         
         if st.button("🔄 Refresh Data"):
             st.cache_data.clear()
@@ -639,7 +787,7 @@ def main():
     tab1, tab2, tab3, tab4 = st.tabs(["📡 Live Monitor", "📊 Historical Data", "💡 Recommendations", "📝 System Logs"])
     
     with tab1:
-        # Live monitoring
+        # Live monitoring with auto-refresh
         placeholder = st.empty()
         
         # Auto-refresh loop
@@ -688,7 +836,7 @@ def main():
                     """, unsafe_allow_html=True)
                 
                 st.markdown(f"""
-                <div style="text-align: right; color: rgba(255,255,255,0.8); margin-bottom: 1rem;">
+                <div style="text-align: right; color: rgba(255,255,255,0.7); margin-bottom: 1rem;">
                     Dashboard updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 </div>
                 """, unsafe_allow_html=True)
@@ -697,46 +845,51 @@ def main():
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
+                    device_color = get_value_color(devices if data_usable else 0, {'high': 15, 'medium': 10})
                     st.markdown(f"""
                     <div class="metric-card">
-                        <div class="metric-label">Active Devices</div>
-                        <div class="metric-value">{devices if data_usable else 0}</div>
+                        <div class="metric-label">📱 Active Devices</div>
+                        <div class="metric-value {device_color if data_usable else 'metric-value-low'}">{devices if data_usable else 0}</div>
                         <div class="metric-unit">connected devices</div>
                     </div>
                     """, unsafe_allow_html=True)
                 
                 with col2:
-                    color = "#f56565" if latency > 100 else "#48bb78" if latency < 50 else "#ed8936"
-                    if not data_usable:
-                        color = "#a0aec0"
+                    display_latency = latency if data_usable else 0
+                    latency_color = get_value_color(display_latency, {'high': 100, 'medium': 50})
                     st.markdown(f"""
                     <div class="metric-card">
-                        <div class="metric-label">Network Latency</div>
-                        <div class="metric-value" style="color: {color}">{latency if data_usable else 0:.1f}</div>
+                        <div class="metric-label">⏱️ Network Latency</div>
+                        <div class="metric-value {latency_color}">{display_latency:.1f}</div>
                         <div class="metric-unit">milliseconds</div>
                     </div>
                     """, unsafe_allow_html=True)
                 
                 with col3:
-                    color = "#f56565" if packet_loss > 2 else "#48bb78" if packet_loss < 1 else "#ed8936"
-                    if not data_usable:
-                        color = "#a0aec0"
+                    display_loss = packet_loss if data_usable else 0
+                    loss_color = get_value_color(display_loss, {'high': 2, 'medium': 1})
                     st.markdown(f"""
                     <div class="metric-card">
-                        <div class="metric-label">Packet Loss</div>
-                        <div class="metric-value" style="color: {color}">{packet_loss if data_usable else 0:.2f}</div>
+                        <div class="metric-label">📉 Packet Loss</div>
+                        <div class="metric-value {loss_color}">{display_loss:.2f}</div>
                         <div class="metric-unit">percentage</div>
                     </div>
                     """, unsafe_allow_html=True)
                 
                 with col4:
-                    color = "#f56565" if bandwidth < 50 else "#48bb78" if bandwidth > 100 else "#ed8936"
-                    if not data_usable:
-                        color = "#a0aec0"
+                    display_bandwidth = bandwidth if data_usable else 0
+                    bw_color = get_value_color(display_bandwidth, {'high': 50, 'medium': 100, 'reverse': True})
+                    # Reverse color logic for bandwidth (lower is worse)
+                    if display_bandwidth < 50:
+                        bw_color = "metric-value-high"
+                    elif display_bandwidth < 100:
+                        bw_color = "metric-value-medium"
+                    else:
+                        bw_color = "metric-value-low"
                     st.markdown(f"""
                     <div class="metric-card">
-                        <div class="metric-label">Bandwidth</div>
-                        <div class="metric-value" style="color: {color}">{bandwidth if data_usable else 0:.1f}</div>
+                        <div class="metric-label">🌐 Bandwidth</div>
+                        <div class="metric-value {bw_color}">{display_bandwidth:.1f}</div>
                         <div class="metric-unit">Mbps</div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -782,14 +935,14 @@ def main():
                     st.markdown("""
                     <div class="prediction-risk">
                         <div class="prediction-title">🚨 NETWORK CONGESTION RISK DETECTED</div>
-                        <div>AI model predicts high probability of network congestion.</div>
+                        <div>AI model predicts high probability of network congestion. Immediate attention recommended.</div>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
                     st.markdown("""
                     <div class="prediction-normal">
                         <div class="prediction-title">✅ NETWORK OPERATING NORMALLY</div>
-                        <div>AI model indicates stable network conditions.</div>
+                        <div>AI model indicates stable network conditions. No immediate action required.</div>
                     </div>
                     """, unsafe_allow_html=True)
                 
@@ -804,21 +957,8 @@ def main():
                                                              display_packet_loss, display_bandwidth, prediction)
                 
                 for advice, severity in zip(advice_list, severity_levels):
-                    if severity == "warning":
-                        bg_color = "#fef3c7"
-                        border_color = "#f59e0b"
-                    elif severity in ["critical", "high"]:
-                        bg_color = "#fee2e2"
-                        border_color = "#dc2626"
-                    elif severity == "medium":
-                        bg_color = "#fef3c7"
-                        border_color = "#f59e0b"
-                    else:
-                        bg_color = "#d1fae5"
-                        border_color = "#10b981"
-                    
                     st.markdown(f"""
-                    <div class="recommendation-card" style="background: {bg_color}; border-left-color: {border_color};">
+                    <div class="recommendation-card">
                         <div class="recommendation-text">{advice}</div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -828,42 +968,108 @@ def main():
     with tab2:
         st.markdown("### 📊 Historical Network Data")
         
-        historical_df = load_historical_data(100)
+        # Load historical data
+        historical_df = load_historical_data(200)
         
         if not historical_df.empty:
-            # Filters
-            col1, col2 = st.columns(2)
+            # Display summary statistics
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                date_range = st.date_input("Select Date Range", [])
+                st.metric("Total Records", len(historical_df))
+            with col2:
+                congestion_pct = (historical_df['congestion_prediction'].sum() / len(historical_df)) * 100
+                st.metric("Congestion Rate", f"{congestion_pct:.1f}%")
+            with col3:
+                st.metric("Avg Devices", f"{historical_df['devices'].mean():.1f}")
+            with col4:
+                st.metric("Data Range", f"{historical_df['timestamp'].min().strftime('%m/%d')} - {historical_df['timestamp'].max().strftime('%m/%d')}")
+            
+            # Filters
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                date_range = st.date_input("Select Date Range", 
+                                           value=[historical_df['timestamp'].min().date(), historical_df['timestamp'].max().date()])
             with col2:
                 show_congestion_only = st.checkbox("Show only congestion events")
+            with col3:
+                metric_to_plot = st.selectbox("Select Metric", ["latency", "bandwidth", "packet_loss", "devices"])
             
             # Apply filters
             df_filtered = historical_df.copy()
+            if len(date_range) == 2:
+                start_date, end_date = date_range
+                df_filtered = df_filtered[(df_filtered['timestamp'].dt.date >= start_date) & 
+                                          (df_filtered['timestamp'].dt.date <= end_date)]
             if show_congestion_only:
                 df_filtered = df_filtered[df_filtered['congestion_prediction'] == 1]
             
-            # Display metrics over time
             if not df_filtered.empty:
+                # Display metrics over time
                 fig = go.Figure()
-                fig.add_trace(go.Scatter(x=df_filtered['timestamp'], y=df_filtered['latency'], 
-                                         mode='lines+markers', name='Latency (ms)'))
-                fig.add_trace(go.Scatter(x=df_filtered['timestamp'], y=df_filtered['bandwidth'], 
-                                         mode='lines+markers', name='Bandwidth (Mbps)', yaxis='y2'))
+                
+                if metric_to_plot == "latency":
+                    fig.add_trace(go.Scatter(x=df_filtered['timestamp'], y=df_filtered['latency'], 
+                                             mode='lines+markers', name='Latency (ms)',
+                                             line=dict(color='#f87171', width=2),
+                                             marker=dict(size=6, color='#f87171')))
+                    fig.update_layout(yaxis_title="Latency (ms)")
+                elif metric_to_plot == "bandwidth":
+                    fig.add_trace(go.Scatter(x=df_filtered['timestamp'], y=df_filtered['bandwidth'], 
+                                             mode='lines+markers', name='Bandwidth (Mbps)',
+                                             line=dict(color='#4ade80', width=2),
+                                             marker=dict(size=6, color='#4ade80')))
+                    fig.update_layout(yaxis_title="Bandwidth (Mbps)")
+                elif metric_to_plot == "packet_loss":
+                    fig.add_trace(go.Scatter(x=df_filtered['timestamp'], y=df_filtered['packet_loss'], 
+                                             mode='lines+markers', name='Packet Loss (%)',
+                                             line=dict(color='#fbbf24', width=2),
+                                             marker=dict(size=6, color='#fbbf24')))
+                    fig.update_layout(yaxis_title="Packet Loss (%)")
+                else:
+                    fig.add_trace(go.Scatter(x=df_filtered['timestamp'], y=df_filtered['devices'], 
+                                             mode='lines+markers', name='Active Devices',
+                                             line=dict(color='#a78bfa', width=2),
+                                             marker=dict(size=6, color='#a78bfa')))
+                    fig.update_layout(yaxis_title="Active Devices")
+                
+                # Add congestion markers
+                congestion_points = df_filtered[df_filtered['congestion_prediction'] == 1]
+                if not congestion_points.empty:
+                    fig.add_trace(go.Scatter(x=congestion_points['timestamp'], 
+                                            y=congestion_points[metric_to_plot],
+                                            mode='markers', name='Congestion Event',
+                                            marker=dict(size=12, color='#dc2626', symbol='x')))
                 
                 fig.update_layout(
-                    title="Network Metrics Over Time",
+                    title=f"{metric_to_plot.title()} Over Time",
                     xaxis_title="Time",
-                    yaxis_title="Latency (ms)",
-                    yaxis2=dict(title="Bandwidth (Mbps)", overlaying='y', side='right'),
-                    template="plotly_white",
-                    height=500
+                    template="plotly_dark",
+                    height=500,
+                    hovermode='x unified'
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
+                # Correlation heatmap
+                st.markdown("### 🔗 Correlation Analysis")
+                corr_cols = ['devices', 'latency', 'packet_loss', 'bandwidth']
+                corr_matrix = df_filtered[corr_cols].corr()
+                
+                fig_corr = go.Figure(data=go.Heatmap(
+                    z=corr_matrix.values,
+                    x=corr_matrix.columns,
+                    y=corr_matrix.columns,
+                    colorscale='RdBu',
+                    zmin=-1, zmax=1,
+                    text=corr_matrix.values.round(2),
+                    texttemplate='%{text}',
+                    textfont={"size": 12}
+                ))
+                fig_corr.update_layout(title="Correlation Between Network Metrics", height=500)
+                st.plotly_chart(fig_corr, use_container_width=True)
+                
                 # Data table
-                st.markdown("### 📋 Data Table")
-                st.dataframe(df_filtered, use_container_width=True)
+                st.markdown("### 📋 Detailed Data Table")
+                st.dataframe(df_filtered.sort_values('timestamp', ascending=False), use_container_width=True)
                 
                 # Download button
                 csv = df_filtered.to_csv(index=False)
@@ -871,63 +1077,119 @@ def main():
             else:
                 st.info("No data matches the selected filters.")
         else:
-            st.info("No historical data available yet. Data will appear as monitoring continues.")
+            st.info("📭 No historical data available yet. Data will appear as monitoring continues.")
     
     with tab3:
         st.markdown("### 💡 IT Recommendations History")
+        st.markdown("AI-generated recommendations based on network conditions")
         
-        recommendations_df = load_recommendations_history(50)
+        recommendations_df = load_recommendations_history(100)
         
         if not recommendations_df.empty:
+            # Summary stats
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Recommendations", len(recommendations_df))
+            with col2:
+                unique_recs = recommendations_df['recommendation'].nunique()
+                st.metric("Unique Recommendations", unique_recs)
+            with col3:
+                st.metric("Most Recent", recommendations_df['created_at'].max().strftime('%Y-%m-%d %H:%M'))
+            
+            # Filter by congestion prediction
+            show_congestion_only = st.checkbox("Show only recommendations from congestion events")
+            if show_congestion_only:
+                recommendations_df = recommendations_df[recommendations_df['congestion_prediction'] == 1]
+            
+            # Display recommendations in expandable cards
             for idx, row in recommendations_df.iterrows():
-                with st.expander(f"Recommendation from {row['created_at']} - Devices: {row['devices']}"):
-                    st.write(f"**Recommendation:** {row['recommendation']}")
-                    st.write(f"**Metrics:** Latency: {row['latency']:.1f}ms, Packet Loss: {row['packet_loss']:.2f}%, Bandwidth: {row['bandwidth']:.1f}Mbps")
-                    st.write(f"**Congestion Prediction:** {'Yes' if row['congestion_prediction'] == 1 else 'No'}")
+                with st.expander(f"📌 {row['created_at'].strftime('%Y-%m-%d %H:%M:%S')} - Devices: {row['devices']}"):
+                    st.markdown(f"**💡 Recommendation:** {row['recommendation']}")
+                    st.markdown("---")
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Devices", row['devices'])
+                    with col2:
+                        st.metric("Latency", f"{row['latency']:.1f} ms")
+                    with col3:
+                        st.metric("Packet Loss", f"{row['packet_loss']:.2f}%")
+                    with col4:
+                        st.metric("Bandwidth", f"{row['bandwidth']:.1f} Mbps")
+                    
+                    if row['congestion_prediction'] == 1:
+                        st.error("⚠️ Congestion was predicted at this time")
+                    else:
+                        st.success("✅ No congestion predicted at this time")
         else:
-            st.info("No recommendations available yet.")
+            st.info("📭 No recommendations available yet. Recommendations will appear when network data is collected.")
     
     with tab4:
         st.markdown("### 📝 System Logs")
+        st.markdown("System activity and data collection logs")
         
-        logs_df = load_system_logs(100)
+        logs_df = load_system_logs(200)
         
         if not logs_df.empty:
-            # Color code log types
-            def color_log_type(log_type):
-                if log_type == 'ERROR':
-                    return '🔴'
-                elif log_type == 'WARNING':
-                    return '🟡'
-                else:
-                    return '🟢'
+            # Filter controls
+            col1, col2 = st.columns(2)
+            with col1:
+                log_type_filter = st.multiselect("Filter by Log Type", 
+                                                 options=logs_df['log_type'].unique(),
+                                                 default=logs_df['log_type'].unique())
+            with col2:
+                search_term = st.text_input("Search in Messages", placeholder="Enter search term...")
             
-            logs_df['icon'] = logs_df['log_type'].apply(color_log_type)
-            logs_df['display'] = logs_df['icon'] + ' ' + logs_df['log_type']
+            # Apply filters
+            filtered_logs = logs_df[logs_df['log_type'].isin(log_type_filter)]
+            if search_term:
+                filtered_logs = filtered_logs[filtered_logs['message'].str.contains(search_term, case=False, na=False)]
+            
+            # Display logs with color coding
+            def color_log_row(row):
+                if row['log_type'] == 'ERROR':
+                    return ['background-color: rgba(220, 38, 38, 0.2)'] * len(row)
+                elif row['log_type'] == 'WARNING':
+                    return ['background-color: rgba(245, 158, 11, 0.2)'] * len(row)
+                else:
+                    return ['background-color: rgba(5, 150, 105, 0.2)'] * len(row)
             
             st.dataframe(
-                logs_df[['created_at', 'display', 'message']],
+                filtered_logs[['created_at', 'log_type', 'message']].sort_values('created_at', ascending=False),
                 use_container_width=True,
                 column_config={
-                    'created_at': 'Timestamp',
-                    'display': 'Type',
-                    'message': 'Message'
+                    'created_at': st.column_config.DatetimeColumn('Timestamp', format='YYYY-MM-DD HH:mm:ss'),
+                    'log_type': st.column_config.TextColumn('Type'),
+                    'message': st.column_config.TextColumn('Message')
                 }
             )
             
             # Clear logs button
-            if st.button("🗑️ Clear Logs", type="secondary"):
-                connection = get_db_connection()
-                if connection:
-                    cursor = connection.cursor()
-                    cursor.execute("DELETE FROM system_logs")
-                    connection.commit()
-                    cursor.close()
-                    connection.close()
-                    st.success("Logs cleared!")
-                    st.rerun()
+            col1, col2, col3 = st.columns([1, 1, 2])
+            with col1:
+                if st.button("🗑️ Clear All Logs", type="secondary"):
+                    connection = get_db_connection()
+                    if connection:
+                        cursor = connection.cursor()
+                        cursor.execute("DELETE FROM system_logs")
+                        connection.commit()
+                        cursor.close()
+                        connection.close()
+                        st.success("Logs cleared!")
+                        st.rerun()
+            with col2:
+                if st.button("📥 Export Logs"):
+                    csv = filtered_logs.to_csv(index=False)
+                    st.download_button("Download", csv, "system_logs.csv", "text/csv", key="export_logs_btn")
         else:
-            st.info("No logs available yet.")
+            st.info("📭 No logs available yet. System logs will appear as monitoring runs.")
+
+    # Footer
+    st.markdown("""
+    <div class="footer">
+        <p>AI Network Congestion Monitor | Powered by Machine Learning | Data from ThingSpeak Channel 3272879</p>
+        <p>Real-time monitoring with MySQL database integration</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
-    main() 
+    main()
