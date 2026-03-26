@@ -44,7 +44,7 @@ def get_db_connection():
         connection = mysql.connector.connect(
             host='localhost',
             database='network_monitor',
-            user='root',
+            user='pma',
             password='@Danielson2000',  # XAMPP default password is empty
             connection_timeout=5,
             use_pure=True  # Use pure Python implementation for better compatibility
