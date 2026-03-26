@@ -1,4 +1,4 @@
-so in my code # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 AI Network Monitor with MySQL Database Integration
 Created for XAMPP MySQL Database
